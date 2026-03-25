@@ -240,6 +240,7 @@ def _render_page_svg(page: dict, theme: "Theme") -> str:
 
     return (
         f'<svg class="diagram-svg" viewBox="0 0 {w:.0f} {h:.0f}" '
+        f'width="{w:.0f}" height="{h:.0f}" '
         f'data-width="{w:.0f}" data-height="{h:.0f}" '
         f'xmlns="http://www.w3.org/2000/svg">'
         f"{defs}"
