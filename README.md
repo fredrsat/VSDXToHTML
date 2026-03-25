@@ -49,6 +49,6 @@ Generate test files and run a conversion:
 
 ```bash
 python3 tests/create_test_vsdx.py
-python3 convert.py tests/enkel.vsdx
-python3 convert.py tests/flersider.vsdx
+python3 convert.py tests/simple.vsdx
+python3 convert.py tests/multipage.vsdx
 ```

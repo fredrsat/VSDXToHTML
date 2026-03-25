@@ -151,7 +151,7 @@ def _parse_page(page: vsdx.Page) -> dict:
 
     return {
         "id": str(page.index_num),
-        "name": page.name or f"Side {page.index_num + 1}",
+        "name": page.name or f"Page {page.index_num + 1}",
         "width": _inches_to_px(page_w_in),
         "height": _inches_to_px(page_h_in),
         "nodes": nodes,

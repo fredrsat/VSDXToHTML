@@ -1,13 +1,13 @@
 """
-Genererer test-.vsdx-filer for utvikling og testing.
+Generate test .vsdx files for development and testing.
 
-Siden python-vsdx kun støtter lesing, bygger vi .vsdx-filer manuelt
-som ZIP-arkiver med OOXML-struktur.
+Since python-vsdx only supports reading, we build .vsdx files manually
+as ZIP archives with OOXML structure.
 
-Kjør:
+Usage:
     python tests/create_test_vsdx.py
-    → tests/enkel.vsdx        (3 shapes, 2 koblinger, én side)
-    → tests/flersider.vsdx    (2 sider med ulike shapes)
+    → tests/simple.vsdx      (3 shapes, 2 connectors, single page)
+    → tests/multipage.vsdx   (2 pages with different shapes)
 """
 
 import zipfile
@@ -15,7 +15,7 @@ import textwrap
 from pathlib import Path
 
 
-# ── XML-maler ────────────────────────────────────────────────────────────────
+# ── XML templates ─────────────────────────────────────────────────────────────
 
 CONTENT_TYPES = """\
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -81,12 +81,12 @@ PAGE_XML = """\
 </PageContents>"""
 
 
-# ── Hjelpefunksjoner ─────────────────────────────────────────────────────────
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
 def shape(id: int, text: str, pin_x: float, pin_y: float,
           width: float = 1.5, height: float = 0.6,
           fill: str = "#dae8fc", stroke: str = "#6c8ebf") -> str:
-    """Lager XML for én rektangulær shape med Cell-basert format (vsdx-standard)."""
+    """Returns XML for a rectangular shape using Cell-based format (vsdx standard)."""
     return textwrap.dedent(f"""\
         <Shape ID="{id}" Type="Shape">
           <Cell N="PinX" V="{pin_x}"/>
@@ -100,7 +100,7 @@ def shape(id: int, text: str, pin_x: float, pin_y: float,
 
 
 def connector(id: int, from_id: int, to_id: int) -> tuple[str, str]:
-    """Lager XML for én connector. Returnerer (shape_xml, connect_xml)."""
+    """Returns (shape_xml, connect_xml) for a connector between two shapes."""
     shape_xml = textwrap.dedent(f"""\
         <Shape ID="{id}" Type="Edge">
           <Cell N="PinX" V="0"/>
@@ -116,12 +116,12 @@ def connector(id: int, from_id: int, to_id: int) -> tuple[str, str]:
 
 def build_vsdx(output_path: Path, title: str, pages: list[dict]) -> None:
     """
-    Bygger en .vsdx-fil fra en liste av side-definisjoner.
+    Builds a .vsdx file from a list of page definitions.
 
     Args:
-        output_path: Utdatasti for .vsdx-filen.
-        title:       Dokumenttittel.
-        pages:       Liste av dicts med nøklene 'name', 'shapes', 'connects'.
+        output_path: Output path for the .vsdx file.
+        title:       Document title.
+        pages:       List of dicts with keys 'name', 'shapes', 'connects'.
     """
     page_overrides = "\n  ".join(
         f'<Override PartName="/visio/pages/page{i+1}.xml" '
@@ -160,47 +160,47 @@ def build_vsdx(output_path: Path, title: str, pages: list[dict]) -> None:
                 ),
             )
 
-    print(f"Lagret: {output_path}")
+    print(f"Saved: {output_path}")
 
 
-# ── Test 1: Enkel prosessflyt ────────────────────────────────────────────────
+# ── Test 1: Simple process flow ───────────────────────────────────────────────
 
-def create_enkel(out_dir: Path) -> None:
+def create_simple(out_dir: Path) -> None:
     """
-    Enkel én-sides prosessflyt:
-    Pasientregistrering → Triagering → Behandling
+    Single-page process flow:
+    Registration → Triage → Treatment
     """
-    s1 = shape(1, "Pasientregistrering", pin_x=1.5, pin_y=7.0,
+    s1 = shape(1, "Registration", pin_x=1.5, pin_y=7.0,
                fill="#dae8fc", stroke="#6c8ebf")
-    s2 = shape(2, "Triagering",          pin_x=4.5, pin_y=7.0,
+    s2 = shape(2, "Triage",       pin_x=4.5, pin_y=7.0,
                fill="#d5e8d4", stroke="#82b366")
-    s3 = shape(3, "Behandling",          pin_x=7.5, pin_y=7.0,
+    s3 = shape(3, "Treatment",    pin_x=7.5, pin_y=7.0,
                fill="#fff2cc", stroke="#d6b656")
 
     c1_shape, c1_conn = connector(4, from_id=1, to_id=2)
     c2_shape, c2_conn = connector(5, from_id=2, to_id=3)
 
     build_vsdx(
-        out_dir / "enkel.vsdx",
-        title="Enkel prosessflyt",
+        out_dir / "simple.vsdx",
+        title="Simple Process Flow",
         pages=[{
-            "name": "Pasientflyt",
+            "name": "Process",
             "shapes": [s1, s2, s3, c1_shape, c2_shape],
             "connects": [c1_conn, c2_conn],
         }],
     )
 
 
-# ── Test 2: Flersiders arkitekturdiagram ─────────────────────────────────────
+# ── Test 2: Multi-page architecture diagram ───────────────────────────────────
 
-def create_flersider(out_dir: Path) -> None:
+def create_multipage(out_dir: Path) -> None:
     """
-    To-siders diagram:
-      Side 1 – Systemkomponenter
-      Side 2 – Dataflyt
+    Two-page diagram:
+      Page 1 – System components
+      Page 2 – Data flow
     """
-    # Side 1: Systemkomponenter
-    s1 = shape(1, "Nettleser",    pin_x=2.0, pin_y=7.5, fill="#f8cecc", stroke="#b85450")
+    # Page 1: System components
+    s1 = shape(1, "Browser",      pin_x=2.0, pin_y=7.5, fill="#f8cecc", stroke="#b85450")
     s2 = shape(2, "API Gateway",  pin_x=5.0, pin_y=7.5, fill="#dae8fc", stroke="#6c8ebf")
     s3 = shape(3, "Database",     pin_x=8.0, pin_y=7.5, fill="#d5e8d4", stroke="#82b366")
     s4 = shape(4, "Auth Service", pin_x=5.0, pin_y=5.5, fill="#e1d5e7", stroke="#9673a6")
@@ -208,30 +208,30 @@ def create_flersider(out_dir: Path) -> None:
     c2_s, c2_c = connector(6, from_id=2, to_id=3)
     c3_s, c3_c = connector(7, from_id=2, to_id=4)
 
-    # Side 2: Dataflyt
-    s10 = shape(10, "Klient sender forespørsel", pin_x=2.0, pin_y=8.0,
+    # Page 2: Data flow
+    s10 = shape(10, "Client Request",  pin_x=2.0, pin_y=8.0,
                 fill="#dae8fc", stroke="#6c8ebf")
-    s11 = shape(11, "Autentisering",             pin_x=5.0, pin_y=8.0,
+    s11 = shape(11, "Authentication",  pin_x=5.0, pin_y=8.0,
                 fill="#fff2cc", stroke="#d6b656")
-    s12 = shape(12, "Hent data fra DB",          pin_x=8.0, pin_y=8.0,
+    s12 = shape(12, "Fetch from DB",   pin_x=8.0, pin_y=8.0,
                 fill="#d5e8d4", stroke="#82b366")
-    s13 = shape(13, "Returner respons",          pin_x=5.0, pin_y=6.0,
+    s13 = shape(13, "Return Response", pin_x=5.0, pin_y=6.0,
                 fill="#f8cecc", stroke="#b85450")
     c10_s, c10_c = connector(14, from_id=10, to_id=11)
     c11_s, c11_c = connector(15, from_id=11, to_id=12)
     c12_s, c12_c = connector(16, from_id=12, to_id=13)
 
     build_vsdx(
-        out_dir / "flersider.vsdx",
-        title="Systemarkitektur",
+        out_dir / "multipage.vsdx",
+        title="System Architecture",
         pages=[
             {
-                "name": "Komponenter",
+                "name": "Components",
                 "shapes": [s1, s2, s3, s4, c1_s, c2_s, c3_s],
                 "connects": [c1_c, c2_c, c3_c],
             },
             {
-                "name": "Dataflyt",
+                "name": "Data Flow",
                 "shapes": [s10, s11, s12, s13, c10_s, c11_s, c12_s],
                 "connects": [c10_c, c11_c, c12_c],
             },
@@ -239,10 +239,10 @@ def create_flersider(out_dir: Path) -> None:
     )
 
 
-# ── Hovedprogram ─────────────────────────────────────────────────────────────
+# ── Main ──────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     out_dir = Path(__file__).parent
-    create_enkel(out_dir)
-    create_flersider(out_dir)
-    print("Ferdig. Kjør: convert tests/enkel.vsdx")
+    create_simple(out_dir)
+    create_multipage(out_dir)
+    print("Done. Run: convert tests/simple.vsdx")
