@@ -1,51 +1,51 @@
 # VSDX → HTML Converter
 
-Konverterer Microsoft Visio-filer (`.vsdx`) til interaktiv, standalone HTML – uten Visio-lisens og uten internettilgang.
+Convert Microsoft Visio files (`.vsdx`) to interactive, standalone HTML — no Visio license or internet connection required.
 
-## Installasjon
+## Installation
 
 ```bash
 pip3 install -e .
 ```
 
-## Bruk
+## Usage
 
 ```bash
-convert diagram.vsdx                        # → diagram.html (samme mappe)
-convert diagram.vsdx -o output.html         # valgfri utdatasti
-convert diagram.vsdx --theme corporate      # med tema
+convert diagram.vsdx                    # → diagram.html (same directory)
+convert diagram.vsdx -o output.html     # custom output path
+convert diagram.vsdx --theme corporate  # with theme
 ```
 
-### Tilgjengelige temaer
+### Available themes
 
-| Tema | Beskrivelse |
+| Theme | Description |
 |---|---|
-| `default` | Bevarer Visio-farger |
-| `corporate` | Profesjonell, mørke toner, subtile skygger |
-| `modern` | Minimalistisk, pasteller, runde hjørner |
+| `default` | Preserves Visio colors |
+| `corporate` | Professional dark tones with subtle shadows |
+| `modern` | Minimalist pastels with rounded corners |
 
-## Arkitektur
+## Architecture
 
 ```
-.vsdx → parser → JSON-graf → renderer → .html
+.vsdx → parser → JSON graph → renderer → .html
 ```
 
-| Lag | Fil | Ansvar |
+| Layer | File | Responsibility |
 |---|---|---|
-| Parser | `parser/vsdx_parser.py` | Leser .vsdx (ZIP+XML), ekstraherer shapes, koblinger, sider |
-| Intermediate | JSON-dict | Provider-uavhengig grafformat (nodes + edges per side) |
-| Renderer | `renderer/svg.py` | Genererer inline SVG i standalone HTML |
-| Temaer | `themes.py` | Styling-maler som overstyrer Visio-farger |
+| Parser | `parser/vsdx_parser.py` | Reads .vsdx (ZIP+XML), extracts shapes, connectors, and pages |
+| Intermediate | JSON dict | Provider-agnostic graph format (nodes + edges per page) |
+| Renderer | `renderer/svg.py` | Generates inline SVG in a standalone HTML file |
+| Themes | `themes.py` | Style presets that override Visio colors |
 
-## Kjente svakheter
+## Known limitations
 
-- **Stilarv fra master shapes** – kompleks stilarv fra Visio master pages kan gi avvik fra Visio-visning
-- **Ingen klikk-navigasjon** – lenker mellom koblede diagrammer støttes ikke ut av boksen
-- **Zoom/pan** – enklere enn dedikerte diagram-viewere (draw.io o.l.)
+- **Master shape style inheritance** — complex style inheritance from Visio master pages may differ from the original Visio rendering
+- **No cross-diagram navigation** — links between connected diagrams are not supported out of the box
+- **Zoom/pan** — simpler than dedicated diagram viewers such as draw.io
 
 ## Testing
 
-Generer test-filer:
+Generate test files and run a conversion:
 
 ```bash
 python3 tests/create_test_vsdx.py
