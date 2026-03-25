@@ -5,9 +5,7 @@ Since python-vsdx only supports reading, we build .vsdx files manually
 as ZIP archives with OOXML structure.
 
 Usage:
-    python tests/create_test_vsdx.py
-    → tests/simple.vsdx      (3 shapes, 2 connectors, single page)
-    → tests/multipage.vsdx   (2 pages with different shapes)
+    python3 tests/create_test_vsdx.py
 """
 
 import zipfile
@@ -99,14 +97,16 @@ def shape(id: int, text: str, pin_x: float, pin_y: float,
         </Shape>""")
 
 
-def connector(id: int, from_id: int, to_id: int) -> tuple[str, str]:
+def connector(id: int, from_id: int, to_id: int, label: str = "") -> tuple[str, str]:
     """Returns (shape_xml, connect_xml) for a connector between two shapes."""
+    text_el = f"<Text>{label}</Text>" if label else ""
     shape_xml = textwrap.dedent(f"""\
         <Shape ID="{id}" Type="Edge">
           <Cell N="PinX" V="0"/>
           <Cell N="PinY" V="0"/>
           <Cell N="Width" V="0"/>
           <Cell N="Height" V="0"/>
+          {text_el}
         </Shape>""")
     connect_xml = textwrap.dedent(f"""\
         <Connect FromSheet="{id}" FromCell="BeginX" ToSheet="{from_id}" ToCell="PinX"/>
@@ -163,80 +163,135 @@ def build_vsdx(output_path: Path, title: str, pages: list[dict]) -> None:
     print(f"Saved: {output_path}")
 
 
-# ── Test 1: Simple process flow ───────────────────────────────────────────────
+# ── Test diagrams ─────────────────────────────────────────────────────────────
 
 def create_simple(out_dir: Path) -> None:
-    """
-    Single-page process flow:
-    Registration → Triage → Treatment
-    """
-    s1 = shape(1, "Registration", pin_x=1.5, pin_y=7.0,
-               fill="#dae8fc", stroke="#6c8ebf")
-    s2 = shape(2, "Triage",       pin_x=4.5, pin_y=7.0,
-               fill="#d5e8d4", stroke="#82b366")
-    s3 = shape(3, "Treatment",    pin_x=7.5, pin_y=7.0,
-               fill="#fff2cc", stroke="#d6b656")
+    """Single-page process flow: Registration → Triage → Treatment."""
+    s1 = shape(1, "Registration", pin_x=1.5, pin_y=7.0, fill="#dae8fc", stroke="#6c8ebf")
+    s2 = shape(2, "Triage",       pin_x=4.5, pin_y=7.0, fill="#d5e8d4", stroke="#82b366")
+    s3 = shape(3, "Treatment",    pin_x=7.5, pin_y=7.0, fill="#fff2cc", stroke="#d6b656")
+    c1_s, c1_c = connector(4, 1, 2)
+    c2_s, c2_c = connector(5, 2, 3)
 
-    c1_shape, c1_conn = connector(4, from_id=1, to_id=2)
-    c2_shape, c2_conn = connector(5, from_id=2, to_id=3)
+    build_vsdx(out_dir / "simple.vsdx", "Simple Process Flow", [{
+        "name": "Process",
+        "shapes": [s1, s2, s3, c1_s, c2_s],
+        "connects": [c1_c, c2_c],
+    }])
 
-    build_vsdx(
-        out_dir / "simple.vsdx",
-        title="Simple Process Flow",
-        pages=[{
-            "name": "Process",
-            "shapes": [s1, s2, s3, c1_shape, c2_shape],
-            "connects": [c1_conn, c2_conn],
-        }],
-    )
-
-
-# ── Test 2: Multi-page architecture diagram ───────────────────────────────────
 
 def create_multipage(out_dir: Path) -> None:
-    """
-    Two-page diagram:
-      Page 1 – System components
-      Page 2 – Data flow
-    """
-    # Page 1: System components
+    """Two-page diagram: system components and data flow."""
     s1 = shape(1, "Browser",      pin_x=2.0, pin_y=7.5, fill="#f8cecc", stroke="#b85450")
     s2 = shape(2, "API Gateway",  pin_x=5.0, pin_y=7.5, fill="#dae8fc", stroke="#6c8ebf")
     s3 = shape(3, "Database",     pin_x=8.0, pin_y=7.5, fill="#d5e8d4", stroke="#82b366")
     s4 = shape(4, "Auth Service", pin_x=5.0, pin_y=5.5, fill="#e1d5e7", stroke="#9673a6")
-    c1_s, c1_c = connector(5, from_id=1, to_id=2)
-    c2_s, c2_c = connector(6, from_id=2, to_id=3)
-    c3_s, c3_c = connector(7, from_id=2, to_id=4)
+    c1_s, c1_c = connector(5, 1, 2)
+    c2_s, c2_c = connector(6, 2, 3)
+    c3_s, c3_c = connector(7, 2, 4)
 
-    # Page 2: Data flow
-    s10 = shape(10, "Client Request",  pin_x=2.0, pin_y=8.0,
-                fill="#dae8fc", stroke="#6c8ebf")
-    s11 = shape(11, "Authentication",  pin_x=5.0, pin_y=8.0,
-                fill="#fff2cc", stroke="#d6b656")
-    s12 = shape(12, "Fetch from DB",   pin_x=8.0, pin_y=8.0,
-                fill="#d5e8d4", stroke="#82b366")
-    s13 = shape(13, "Return Response", pin_x=5.0, pin_y=6.0,
-                fill="#f8cecc", stroke="#b85450")
-    c10_s, c10_c = connector(14, from_id=10, to_id=11)
-    c11_s, c11_c = connector(15, from_id=11, to_id=12)
-    c12_s, c12_c = connector(16, from_id=12, to_id=13)
+    s10 = shape(10, "Client Request",  pin_x=2.0, pin_y=8.0, fill="#dae8fc", stroke="#6c8ebf")
+    s11 = shape(11, "Authentication",  pin_x=5.0, pin_y=8.0, fill="#fff2cc", stroke="#d6b656")
+    s12 = shape(12, "Fetch from DB",   pin_x=8.0, pin_y=8.0, fill="#d5e8d4", stroke="#82b366")
+    s13 = shape(13, "Return Response", pin_x=5.0, pin_y=6.0, fill="#f8cecc", stroke="#b85450")
+    c10_s, c10_c = connector(14, 10, 11)
+    c11_s, c11_c = connector(15, 11, 12)
+    c12_s, c12_c = connector(16, 12, 13)
 
-    build_vsdx(
-        out_dir / "multipage.vsdx",
-        title="System Architecture",
-        pages=[
-            {
-                "name": "Components",
-                "shapes": [s1, s2, s3, s4, c1_s, c2_s, c3_s],
-                "connects": [c1_c, c2_c, c3_c],
-            },
-            {
-                "name": "Data Flow",
-                "shapes": [s10, s11, s12, s13, c10_s, c11_s, c12_s],
-                "connects": [c10_c, c11_c, c12_c],
-            },
-        ],
-    )
+    build_vsdx(out_dir / "multipage.vsdx", "System Architecture", [
+        {"name": "Components", "shapes": [s1, s2, s3, s4, c1_s, c2_s, c3_s], "connects": [c1_c, c2_c, c3_c]},
+        {"name": "Data Flow",  "shapes": [s10, s11, s12, s13, c10_s, c11_s, c12_s], "connects": [c10_c, c11_c, c12_c]},
+    ])
+
+
+def create_empty_page(out_dir: Path) -> None:
+    """Page with no shapes — tests graceful empty-page handling."""
+    build_vsdx(out_dir / "empty_page.vsdx", "Empty Page", [{
+        "name": "Empty",
+        "shapes": [],
+        "connects": [],
+    }])
+
+
+def create_no_text(out_dir: Path) -> None:
+    """Shapes with no text labels — tests rendering of unlabelled shapes."""
+    s1 = shape(1, "", pin_x=2.0, pin_y=7.0, fill="#dae8fc", stroke="#6c8ebf")
+    s2 = shape(2, "", pin_x=5.0, pin_y=7.0, fill="#d5e8d4", stroke="#82b366")
+    s3 = shape(3, "", pin_x=8.0, pin_y=7.0, fill="#fff2cc", stroke="#d6b656")
+    c1_s, c1_c = connector(4, 1, 2)
+    c2_s, c2_c = connector(5, 2, 3)
+
+    build_vsdx(out_dir / "no_text.vsdx", "No Text Labels", [{
+        "name": "Diagram",
+        "shapes": [s1, s2, s3, c1_s, c2_s],
+        "connects": [c1_c, c2_c],
+    }])
+
+
+def create_labeled_edges(out_dir: Path) -> None:
+    """Connectors with labels — tests edge label rendering."""
+    s1 = shape(1, "Start",    pin_x=1.5, pin_y=7.0, fill="#dae8fc", stroke="#6c8ebf")
+    s2 = shape(2, "Decision", pin_x=4.5, pin_y=7.0, fill="#fff2cc", stroke="#d6b656")
+    s3 = shape(3, "End A",    pin_x=7.5, pin_y=8.5, fill="#d5e8d4", stroke="#82b366")
+    s4 = shape(4, "End B",    pin_x=7.5, pin_y=5.5, fill="#f8cecc", stroke="#b85450")
+    c1_s, c1_c = connector(5, 1, 2, label="begin")
+    c2_s, c2_c = connector(6, 2, 3, label="yes")
+    c3_s, c3_c = connector(7, 2, 4, label="no")
+
+    build_vsdx(out_dir / "labeled_edges.vsdx", "Labeled Edges", [{
+        "name": "Decision Flow",
+        "shapes": [s1, s2, s3, s4, c1_s, c2_s, c3_s],
+        "connects": [c1_c, c2_c, c3_c],
+    }])
+
+
+def create_large(out_dir: Path) -> None:
+    """Grid of 20 shapes — tests rendering and auto-fit with many shapes."""
+    shapes_xml = []
+    connects_xml = []
+    sid = 1
+    cols, rows = 5, 4
+    for row in range(rows):
+        for col in range(cols):
+            px = 1.5 + col * 2.5
+            py = 8.0 - row * 1.5
+            fills = ["#dae8fc", "#d5e8d4", "#fff2cc", "#f8cecc", "#e1d5e7"]
+            strokes = ["#6c8ebf", "#82b366", "#d6b656", "#b85450", "#9673a6"]
+            f = fills[col % len(fills)]
+            s = strokes[col % len(strokes)]
+            shapes_xml.append(shape(sid, f"Step {sid}", pin_x=px, pin_y=py,
+                                    width=1.8, height=0.7, fill=f, stroke=s))
+            # Connect horizontally within each row
+            if col > 0:
+                prev = sid - 1
+                cs, cc = connector(100 + sid, prev, sid)
+                shapes_xml.append(cs)
+                connects_xml.append(cc)
+            sid += 1
+
+    build_vsdx(out_dir / "large.vsdx", "Large Diagram", [{
+        "name": "Grid",
+        "shapes": shapes_xml,
+        "connects": connects_xml,
+    }])
+
+
+def create_long_text(out_dir: Path) -> None:
+    """Shapes with long text — tests word wrap and text clipping."""
+    s1 = shape(1, "This is a shape with a very long label that should wrap across multiple lines",
+               pin_x=2.0, pin_y=7.0, width=1.5, height=0.8, fill="#dae8fc", stroke="#6c8ebf")
+    s2 = shape(2, "Short",
+               pin_x=5.5, pin_y=7.0, width=1.5, height=0.8, fill="#d5e8d4", stroke="#82b366")
+    s3 = shape(3, "Another shape with more text than fits in a single line easily",
+               pin_x=9.0, pin_y=7.0, width=1.5, height=0.8, fill="#fff2cc", stroke="#d6b656")
+    c1_s, c1_c = connector(4, 1, 2)
+    c2_s, c2_c = connector(5, 2, 3)
+
+    build_vsdx(out_dir / "long_text.vsdx", "Long Text Labels", [{
+        "name": "Diagram",
+        "shapes": [s1, s2, s3, c1_s, c2_s],
+        "connects": [c1_c, c2_c],
+    }])
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -245,4 +300,9 @@ if __name__ == "__main__":
     out_dir = Path(__file__).parent
     create_simple(out_dir)
     create_multipage(out_dir)
-    print("Done. Run: convert tests/simple.vsdx")
+    create_empty_page(out_dir)
+    create_no_text(out_dir)
+    create_labeled_edges(out_dir)
+    create_large(out_dir)
+    create_long_text(out_dir)
+    print("\nDone. Run: python3 convert.py tests/simple.vsdx")

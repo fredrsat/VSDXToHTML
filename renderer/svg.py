@@ -6,7 +6,8 @@ Pipeline: JSON graph → inline SVG → standalone HTML file
 Design decisions:
   - Zero external dependencies. The output file works offline by opening it in a browser.
   - Visio files contain exact coordinates (x, y, w, h) — no layout engine needed.
-  - Zoom and pan handled with ~20 lines of vanilla JS via CSS transform manipulation.
+  - Zoom and pan handled with vanilla JS via CSS transform manipulation.
+  - Auto-fit on load: SVG scales to fill the viewport on first render.
   - Multi-page navigation via HTML tabs, no framework required.
   - Theme support: Theme object overrides colors and style when override_visio_colors=True.
 
@@ -59,8 +60,9 @@ def _render_node(node: dict, theme: "Theme", node_index: int) -> str:
     Renders a single node (shape) as an SVG element.
 
     Consists of:
+      - <clipPath> to prevent text from overflowing the shape bounds
       - <rect> for background and border, with optional shadow from the theme
-      - <text> with <tspan> lines for the content
+      - <text> with <tspan> lines for the content, clipped to shape bounds
       - <title> for tooltip (used by browser and screen readers)
 
     When theme.override_visio_colors=True, theme colors are used instead of
@@ -74,6 +76,7 @@ def _render_node(node: dict, theme: "Theme", node_index: int) -> str:
     text = node.get("text", "")
     tooltip = node.get("tooltip", "")
     style = node.get("style", {})
+    node_id = node["id"]
 
     if theme.override_visio_colors:
         fill = theme.node_fills[node_index % len(theme.node_fills)]
@@ -94,7 +97,8 @@ def _render_node(node: dict, theme: "Theme", node_index: int) -> str:
     words = text.split()
     lines: list[str] = []
     current = ""
-    chars_per_line = max(1, int(w / (font_size * 0.6)))
+    padding = font_size * 0.8
+    chars_per_line = max(1, int((w - padding * 2) / (font_size * 0.6)))
     for word in words:
         if len(current) + len(word) + 1 <= chars_per_line:
             current = (current + " " + word).strip()
@@ -119,27 +123,43 @@ def _render_node(node: dict, theme: "Theme", node_index: int) -> str:
 
     title_el = f"<title>{html.escape(tooltip or text)}</title>" if (tooltip or text) else ""
     shadow = 'filter="url(#shadow)"' if theme.node_shadow else ""
+    clip_id = f"clip_{html.escape(node_id)}"
 
     return (
-        f'<g class="node" data-id="{html.escape(node["id"])}">'
+        f'<clipPath id="{clip_id}">'
+        f'<rect x="{x:.1f}" y="{y:.1f}" width="{w:.1f}" height="{h:.1f}"/>'
+        f"</clipPath>"
+        f'<g class="node" data-id="{html.escape(node_id)}">'
         f"{title_el}"
         f'<rect x="{x:.1f}" y="{y:.1f}" width="{w:.1f}" height="{h:.1f}" '
         f'rx="{radius}" fill="{fill}" stroke="{stroke}" stroke-width="1.5" {shadow}/>'
         f'<text x="{x + w / 2:.1f}" y="{text_y_start:.1f}" '
         f'font-size="{font_size}" text-anchor="middle" '
-        f'fill="{text_color}" font-family="{font_family}">'
+        f'fill="{text_color}" font-family="{font_family}" '
+        f'clip-path="url(#{clip_id})">'
         f"{tspans}</text>"
         f"</g>"
     )
 
 
+def _orthogonal_path(x1: float, y1: float, x2: float, y2: float) -> str:
+    """
+    Returns an SVG path string for an orthogonal (L-shaped) connector.
+
+    Routes horizontally from the source midpoint, then vertically to the
+    target midpoint. This avoids diagonal lines crossing over shapes.
+    """
+    mx = (x1 + x2) / 2
+    return f"M {x1:.1f} {y1:.1f} L {mx:.1f} {y1:.1f} L {mx:.1f} {y2:.1f} L {x2:.1f} {y2:.1f}"
+
+
 def _render_edge(edge: dict, node_map: dict[str, dict], theme: "Theme") -> str:
     """
-    Renders a single connector as an SVG line between two nodes.
+    Renders a single connector as an orthogonal SVG path between two nodes.
 
-    Draws a straight line from the center of the source node to the center
-    of the target node, with an arrowhead at the target end and an optional
-    label at the midpoint.
+    Routes from the right edge of the source to the left edge of the target
+    when the target is to the right; otherwise falls back to center-to-center
+    routing. Includes an arrowhead at the target end and an optional label.
 
     Edges where source or target are not found in node_map are skipped silently.
     """
@@ -148,12 +168,19 @@ def _render_edge(edge: dict, node_map: dict[str, dict], theme: "Theme") -> str:
     if not src or not tgt:
         return ""
 
-    x1 = src["x"] + src["w"] / 2
+    # Connect from the closest horizontal edges for cleaner routing
+    if tgt["x"] >= src["x"]:
+        x1 = src["x"] + src["w"]
+        x2 = tgt["x"]
+    else:
+        x1 = src["x"]
+        x2 = tgt["x"] + tgt["w"]
+
     y1 = src["y"] + src["h"] / 2
-    x2 = tgt["x"] + tgt["w"] / 2
     y2 = tgt["y"] + tgt["h"] / 2
     label = edge.get("label", "")
     color = theme.edge_color
+    path = _orthogonal_path(x1, y1, x2, y2)
 
     label_el = ""
     if label:
@@ -167,8 +194,8 @@ def _render_edge(edge: dict, node_map: dict[str, dict], theme: "Theme") -> str:
 
     return (
         f'<g class="edge">'
-        f'<line x1="{x1:.1f}" y1="{y1:.1f}" x2="{x2:.1f}" y2="{y2:.1f}" '
-        f'stroke="{color}" stroke-width="{theme.edge_width}" marker-end="url(#arrowhead)"/>'
+        f'<path d="{path}" stroke="{color}" stroke-width="{theme.edge_width}" '
+        f'fill="none" marker-end="url(#arrowhead)"/>'
         f"{label_el}"
         f"</g>"
     )
@@ -203,14 +230,23 @@ def _render_page_svg(page: dict, theme: "Theme") -> str:
     edge_svgs = "".join(_render_edge(e, node_map, theme) for e in edges)
     node_svgs = "".join(_render_node(n, theme, i) for i, n in enumerate(nodes))
 
+    empty_msg = ""
+    if not nodes:
+        empty_msg = (
+            f'<text x="{w/2:.0f}" y="{h/2:.0f}" text-anchor="middle" '
+            f'font-size="14" fill="#aaa" font-family="system-ui, sans-serif">'
+            f"No shapes on this page</text>"
+        )
+
     return (
         f'<svg class="diagram-svg" viewBox="0 0 {w:.0f} {h:.0f}" '
-        f'width="{w:.0f}" height="{h:.0f}" '
+        f'data-width="{w:.0f}" data-height="{h:.0f}" '
         f'xmlns="http://www.w3.org/2000/svg">'
         f"{defs}"
         f'<rect width="100%" height="100%" fill="{theme.page_bg}"/>'
         f"{edge_svgs}"
         f"{node_svgs}"
+        f"{empty_msg}"
         f"</svg>"
     )
 
@@ -224,7 +260,9 @@ def render_html(graph: dict, theme: "Theme | None" = None) -> str:
 
     The output has zero external dependencies and works offline.
     Includes:
-      - Inline SVG per page with theme styling
+      - Inline SVG per page with theme styling and text clipping
+      - Orthogonal connectors for cleaner routing
+      - Auto-fit on load: SVG scales to fill the viewport
       - Tab navigation for multi-page diagrams
       - Zoom and pan via mouse wheel and drag (vanilla JS)
       - Alt text and diagram description from AI enrichment if available
@@ -247,7 +285,7 @@ def render_html(graph: dict, theme: "Theme | None" = None) -> str:
 
     page_svgs = [_render_page_svg(p, theme) for p in pages]
 
-    # Fane-knapper (bare synlige ved mer enn én side)
+    # Tab buttons — only visible when there is more than one page
     tab_display = "flex" if len(pages) > 1 else "none"
     tab_buttons = "".join(
         f'<button class="tab-btn{" active" if i == 0 else ""}" '
@@ -275,7 +313,7 @@ def render_html(graph: dict, theme: "Theme | None" = None) -> str:
     viewport_offset = "90px" if (description or has_tabs) else "56px"
 
     return f"""<!DOCTYPE html>
-<html lang="no">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -314,7 +352,6 @@ def render_html(graph: dict, theme: "Theme | None" = None) -> str:
     #viewport:active {{ cursor: grabbing; }}
 
     .diagram-svg {{
-      max-width: 100%; max-height: 100%;
       transform-origin: center center;
     }}
 
@@ -346,7 +383,7 @@ def render_html(graph: dict, theme: "Theme | None" = None) -> str:
   <div class="zoom-controls">
     <button class="zoom-btn" onclick="zoom(0.2)" title="Zoom in">+</button>
     <button class="zoom-btn" onclick="zoom(-0.2)" title="Zoom out">−</button>
-    <button class="zoom-btn" onclick="resetZoom()" title="Reset">⊙</button>
+    <button class="zoom-btn" onclick="fitToViewport()" title="Fit to window">⊙</button>
   </div>
 
   <script>
@@ -356,22 +393,6 @@ def render_html(graph: dict, theme: "Theme | None" = None) -> str:
     var offsetX = 0, offsetY = 0;
     var isDragging = false;
     var dragStart = {{ x: 0, y: 0 }};
-
-    function showPage(index) {{
-      currentPage = index;
-      scale = 1; offsetX = 0; offsetY = 0;
-      document.querySelectorAll('.tab-btn').forEach(function(b, i) {{
-        b.classList.toggle('active', i === index);
-      }});
-      var container = document.getElementById('svg-container');
-      container.innerHTML = PAGES[index].svg;
-      var svg = container.querySelector('svg');
-      if (svg && PAGES[index].alt_text) {{
-        svg.setAttribute('aria-label', PAGES[index].alt_text);
-        svg.setAttribute('role', 'img');
-      }}
-      applyTransform();
-    }}
 
     function getSvg() {{ return document.querySelector('#svg-container svg'); }}
 
@@ -383,21 +404,46 @@ def render_html(graph: dict, theme: "Theme | None" = None) -> str:
       }}
     }}
 
+    /** Scales the SVG to fill 90% of the viewport while preserving aspect ratio. */
+    function fitToViewport() {{
+      var svg = getSvg();
+      if (!svg) return;
+      var vp = document.getElementById('viewport');
+      var svgW = parseFloat(svg.getAttribute('data-width'));
+      var svgH = parseFloat(svg.getAttribute('data-height'));
+      scale = Math.min(vp.clientWidth / svgW, vp.clientHeight / svgH) * 0.9;
+      offsetX = 0;
+      offsetY = 0;
+      applyTransform();
+    }}
+
+    function showPage(index) {{
+      currentPage = index;
+      document.querySelectorAll('.tab-btn').forEach(function(b, i) {{
+        b.classList.toggle('active', i === index);
+      }});
+      var container = document.getElementById('svg-container');
+      container.innerHTML = PAGES[index].svg;
+      var svg = getSvg();
+      if (svg && PAGES[index].alt_text) {{
+        svg.setAttribute('aria-label', PAGES[index].alt_text);
+        svg.setAttribute('role', 'img');
+      }}
+      fitToViewport();
+    }}
+
     function zoom(delta) {{
       scale = Math.min(5, Math.max(0.1, scale + delta));
       applyTransform();
     }}
 
-    function resetZoom() {{
-      scale = 1; offsetX = 0; offsetY = 0;
-      applyTransform();
-    }}
-
+    // Mouse wheel zoom
     document.getElementById('viewport').addEventListener('wheel', function(e) {{
       e.preventDefault();
       zoom(e.deltaY < 0 ? 0.1 : -0.1);
     }}, {{ passive: false }});
 
+    // Drag to pan
     var vp = document.getElementById('viewport');
     vp.addEventListener('mousedown', function(e) {{
       isDragging = true;
@@ -411,7 +457,16 @@ def render_html(graph: dict, theme: "Theme | None" = None) -> str:
     }});
     window.addEventListener('mouseup', function() {{ isDragging = false; }});
 
-    if (PAGES.length > 0) showPage(0);
+    // Init: show first page, auto-fit after layout is complete
+    if (PAGES.length > 0) {{
+      document.getElementById('svg-container').innerHTML = PAGES[0].svg;
+      var initSvg = getSvg();
+      if (initSvg && PAGES[0].alt_text) {{
+        initSvg.setAttribute('aria-label', PAGES[0].alt_text);
+        initSvg.setAttribute('role', 'img');
+      }}
+      window.addEventListener('load', fitToViewport);
+    }}
   </script>
 </body>
 </html>"""
