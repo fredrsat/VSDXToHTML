@@ -1,8 +1,8 @@
 """
-Styling-maler for SVG-rendereren.
+Style themes for the SVG renderer.
 
-En Theme definerer alle visuelle parametre som rendereren bruker.
-Default-temaet bevarer Visio-farger. De øvrige malene overstyrer alt.
+A Theme defines all visual parameters used by the renderer.
+The default theme preserves Visio colors. Other themes override everything.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 class Theme:
     name: str
 
-    # Side
+    # Page
     page_bg: str = "#ffffff"
     html_bg: str = "#f0f2f5"
 
@@ -30,15 +30,15 @@ class Theme:
     node_radius: int = 4
     node_shadow: bool = False
 
-    # Koblinger
+    # Connectors
     edge_color: str = "#666666"
     edge_width: float = 1.5
 
-    # Overstyrer Visio-farger når True
+    # When True, theme colors override Visio colors
     override_visio_colors: bool = False
 
 
-# ── Maler ────────────────────────────────────────────────────────────────────
+# ── Themes ────────────────────────────────────────────────────────────────────
 
 THEMES: dict[str, Theme] = {}
 
@@ -48,11 +48,11 @@ def register(theme: Theme) -> Theme:
     return theme
 
 
-# Standard – bevar Visio-farger
+# Default — preserves Visio colors
 register(Theme(name="default"))
 
 
-# Corporate – profesjonell, mørke toner, subtile skygger
+# Corporate — professional dark tones with subtle shadows
 register(Theme(
     name="corporate",
     page_bg="#ffffff",
@@ -72,8 +72,7 @@ register(Theme(
 ))
 
 
-
-# Modern – minimalistisk, pasteller, mye luft
+# Modern — minimalist pastels with rounded corners
 register(Theme(
     name="modern",
     page_bg="#ffffff",
@@ -94,8 +93,8 @@ register(Theme(
 
 
 def get(name: str) -> Theme:
-    """Henter tema med gitt navn. Feiler med forklarende melding ved ukjent navn."""
+    """Returns the theme with the given name. Raises ValueError for unknown names."""
     if name not in THEMES:
         available = ", ".join(THEMES.keys())
-        raise ValueError(f"Ukjent tema '{name}'. Tilgjengelige: {available}")
+        raise ValueError(f"Unknown theme '{name}'. Available: {available}")
     return THEMES[name]

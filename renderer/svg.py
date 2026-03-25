@@ -1,19 +1,19 @@
 """
-Renderer-strategi: SVG (inline i HTML)
+Renderer strategy: SVG (inline in HTML)
 
-Pipeline: JSON-graf → inline SVG → standalone HTML-fil
+Pipeline: JSON graph → inline SVG → standalone HTML file
 
-Designvalg:
-  - Null eksterne avhengigheter. Filen fungerer offline ved å åpne den i en browser.
-  - Visio-filer inneholder eksakte koordinater (x, y, w, h) – ingen layout-motor trengs.
-  - Zoom og pan håndteres med ~20 linjer vanilla JS via CSS transform-manipulasjon.
-  - Flersidig navigasjon via HTML-tabs med ren CSS/JS, ingen rammeverk.
-  - Tema-støtte: Theme-objektet overstyrer farger og stil når override_visio_colors=True.
+Design decisions:
+  - Zero external dependencies. The output file works offline by opening it in a browser.
+  - Visio files contain exact coordinates (x, y, w, h) — no layout engine needed.
+  - Zoom and pan handled with ~20 lines of vanilla JS via CSS transform manipulation.
+  - Multi-page navigation via HTML tabs, no framework required.
+  - Theme support: Theme object overrides colors and style when override_visio_colors=True.
 
-Kjente svakheter (dokumenter i README):
-  - Kompleks stilarv fra Visio master shapes kan avvike fra Visio-visning.
-  - Klikk-navigasjon mellom koblede diagrammer støttes ikke ut av boksen.
-  - Zoom/pan er enklere enn draw.io sin innebygde viewer.
+Known limitations (document in README):
+  - Complex style inheritance from Visio master shapes may differ from original Visio rendering.
+  - Click-navigation between linked diagrams is not supported out of the box.
+  - Zoom/pan is simpler than dedicated diagram viewers such as draw.io.
 """
 
 from __future__ import annotations
@@ -26,15 +26,15 @@ if TYPE_CHECKING:
     from themes import Theme
 
 
-# ── Fargehåndtering ──────────────────────────────────────────────────────────
+# ── Color handling ───────────────────────────────────────────────────────────
 
 
 def _normalize_color(value: Any, default: str) -> str:
     """
-    Normaliserer Visio-fargeverdier til #rrggbb CSS-format.
+    Normalizes Visio color values to #rrggbb CSS format.
 
-    Visio kan returnere farger som hex-streng (#rrggbb) eller som et
-    desimalt heltall der RGB er pakket som 0xBBGGRR (liten-endian).
+    Visio may return colors as a hex string (#rrggbb) or as a decimal
+    integer where RGB is packed as 0xBBGGRR (little-endian).
     """
     if not value:
         return default
@@ -51,21 +51,21 @@ def _normalize_color(value: Any, default: str) -> str:
         return default
 
 
-# ── SVG-primitiver ───────────────────────────────────────────────────────────
+# ── SVG primitives ───────────────────────────────────────────────────────────
 
 
 def _render_node(node: dict, theme: "Theme", node_index: int) -> str:
     """
-    Rendrer én node (shape) som et SVG-element.
+    Renders a single node (shape) as an SVG element.
 
-    Består av:
-      - <rect> for bakgrunn og ramme, med valgfri skygge fra temaet
-      - <text> med <tspan>-linjer for innholdet
-      - <title> for tooltip (brukes av browser og screen readers)
+    Consists of:
+      - <rect> for background and border, with optional shadow from the theme
+      - <text> with <tspan> lines for the content
+      - <title> for tooltip (used by browser and screen readers)
 
-    Når theme.override_visio_colors=True brukes tema-farger i stedet for
-    Visio-farger. Tema-fyllfarger sykles gjennom node_fills-listen slik
-    at naboshapes får ulike farger automatisk.
+    When theme.override_visio_colors=True, theme colors are used instead of
+    Visio colors. Theme fill colors cycle through node_fills so adjacent
+    shapes get different colors automatically.
     """
     x = node["x"]
     y = node["y"]
@@ -90,7 +90,7 @@ def _render_node(node: dict, theme: "Theme", node_index: int) -> str:
         font_family = "system-ui, sans-serif"
         radius = 4
 
-    # Enkel tekstbryting: del på whitespace, legg én linje per tspan
+    # Simple word wrap: split on whitespace, one line per tspan
     words = text.split()
     lines: list[str] = []
     current = ""
@@ -135,12 +135,13 @@ def _render_node(node: dict, theme: "Theme", node_index: int) -> str:
 
 def _render_edge(edge: dict, node_map: dict[str, dict], theme: "Theme") -> str:
     """
-    Rendrer én kant (connector) som en SVG-linje mellom to nodes.
+    Renders a single connector as an SVG line between two nodes.
 
-    Tegner en rett linje fra senter av kilde-node til senter av mål-node,
-    med en pilspiss på mål-enden og valgfri label midtveis.
+    Draws a straight line from the center of the source node to the center
+    of the target node, with an arrowhead at the target end and an optional
+    label at the midpoint.
 
-    Kanter der kilde eller mål ikke finnes i node_map hoppes over stille.
+    Edges where source or target are not found in node_map are skipped silently.
     """
     src = node_map.get(edge["from"])
     tgt = node_map.get(edge["to"])
@@ -175,11 +176,10 @@ def _render_edge(edge: dict, node_map: dict[str, dict], theme: "Theme") -> str:
 
 def _render_page_svg(page: dict, theme: "Theme") -> str:
     """
-    Bygger et komplett <svg>-element for én side.
+    Builds a complete <svg> element for a single page.
 
-    Rekkefølge: kanter tegnes under nodes slik at piler ikke
-    overlapper shape-boksene. SVG-definisjoner inkluderer pil-markør
-    og valgfri skygge-filter for temaet.
+    Edges are drawn before nodes so arrowheads do not overlap shape boxes.
+    SVG defs include the arrowhead marker and an optional drop-shadow filter.
     """
     w = page["width"]
     h = page["height"]
@@ -215,26 +215,26 @@ def _render_page_svg(page: dict, theme: "Theme") -> str:
     )
 
 
-# ── HTML-wrapper ─────────────────────────────────────────────────────────────
+# ── HTML wrapper ─────────────────────────────────────────────────────────────
 
 
 def render_html(graph: dict, theme: "Theme | None" = None) -> str:
     """
-    Konverterer en intermediate JSON-graf til en komplett, standalone HTML-fil.
+    Converts an intermediate JSON graph to a complete, standalone HTML file.
 
-    Filen har null eksterne avhengigheter og fungerer offline.
-    Inkluderer:
-      - Inline SVG per side med tema-styling
-      - Fane-navigasjon for flersidige diagrammer
-      - Zoom og pan via mushjul og dra (vanilla JS)
-      - Alt-tekst og diagram-beskrivelse fra AI-berikelse hvis tilgjengelig
+    The output has zero external dependencies and works offline.
+    Includes:
+      - Inline SVG per page with theme styling
+      - Tab navigation for multi-page diagrams
+      - Zoom and pan via mouse wheel and drag (vanilla JS)
+      - Alt text and diagram description from AI enrichment if available
 
     Args:
-        graph: Intermediate JSON-graf fra parseren (evt. beriket av AI-laget).
-        theme: Tema-objekt. Bruker default-tema hvis None.
+        graph: Intermediate JSON graph from the parser (optionally AI-enriched).
+        theme: Theme object. Uses default theme if None.
 
     Returns:
-        Komplett HTML som streng, klar til å skrives til fil.
+        Complete HTML string, ready to write to a file.
     """
     from themes import get as get_theme
     if theme is None:
@@ -344,9 +344,9 @@ def render_html(graph: dict, theme: "Theme | None" = None) -> str:
   </div>
 
   <div class="zoom-controls">
-    <button class="zoom-btn" onclick="zoom(0.2)" title="Zoom inn">+</button>
-    <button class="zoom-btn" onclick="zoom(-0.2)" title="Zoom ut">−</button>
-    <button class="zoom-btn" onclick="resetZoom()" title="Tilbakestill">⊙</button>
+    <button class="zoom-btn" onclick="zoom(0.2)" title="Zoom in">+</button>
+    <button class="zoom-btn" onclick="zoom(-0.2)" title="Zoom out">−</button>
+    <button class="zoom-btn" onclick="resetZoom()" title="Reset">⊙</button>
   </div>
 
   <script>

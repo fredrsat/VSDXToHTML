@@ -1,12 +1,12 @@
 """
 VSDX → HTML converter
 
-Bruk:
+Usage:
     python3 convert.py diagram.vsdx
-    python3 convert.py diagram.vsdx --theme hso
-    python3 convert.py diagram.vsdx --theme corporate -o output.html
+    python3 convert.py diagram.vsdx --theme corporate
+    python3 convert.py diagram.vsdx --theme modern -o output.html
 
-Tilgjengelige temaer: default, corporate, hso, modern
+Available themes: default, corporate, modern
 """
 
 import argparse
@@ -20,44 +20,44 @@ from themes import get as get_theme, THEMES
 
 def main() -> None:
     p = argparse.ArgumentParser(
-        description="Konverter .vsdx til standalone HTML.",
+        description="Convert a .vsdx file to standalone HTML.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=f"Tilgjengelige temaer: {', '.join(THEMES.keys())}",
+        epilog=f"Available themes: {', '.join(THEMES.keys())}",
     )
-    p.add_argument("input", help=".vsdx-fil som skal konverteres")
-    p.add_argument("-o", "--output", help="Utdatafil (standard: samme navn som input med .html)")
+    p.add_argument("input", help=".vsdx file to convert")
+    p.add_argument("-o", "--output", help="Output file (default: same name as input with .html)")
     p.add_argument(
         "--theme",
         default="default",
-        metavar="NAVN",
-        help="Styling-tema (standard: default)",
+        metavar="NAME",
+        help="Style theme (default: default)",
     )
     args = p.parse_args()
 
     input_path = Path(args.input)
     if not input_path.exists():
-        print(f"Feil: finner ikke {input_path}", file=sys.stderr)
+        print(f"Error: file not found: {input_path}", file=sys.stderr)
         sys.exit(1)
     if input_path.suffix.lower() != ".vsdx":
-        print("Feil: filen må være en .vsdx-fil.", file=sys.stderr)
+        print("Error: input file must be a .vsdx file.", file=sys.stderr)
         sys.exit(1)
 
     try:
         theme = get_theme(args.theme)
     except ValueError as e:
-        print(f"Feil: {e}", file=sys.stderr)
+        print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
 
     output_path = Path(args.output) if args.output else input_path.with_suffix(".html")
 
-    print(f"Parser {input_path} …")
+    print(f"Parsing {input_path} ...")
     graph = parse_vsdx(input_path)
 
-    print(f"Rendrer SVG (tema: {theme.name}) …")
+    print(f"Rendering SVG (theme: {theme.name}) ...")
     output = render_html(graph, theme=theme)
 
     output_path.write_text(output, encoding="utf-8")
-    print(f"Ferdig: {output_path}")
+    print(f"Done: {output_path}")
 
 
 if __name__ == "__main__":

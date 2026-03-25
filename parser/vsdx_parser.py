@@ -2,9 +2,9 @@
 Phase 1 – Parser
 .vsdx → intermediate JSON graph
 
-Bruker python-vsdx (MIT) for å abstrahere over ZIP/XML-kompleksiteten.
-Koordinatsystem: Visio bruker inches med origo nede til venstre (y opp).
-Konverterer til SVG/HTML-konvensjon: origo øverst til venstre (y ned).
+Uses python-vsdx (MIT) to abstract over ZIP/XML complexity.
+Coordinate system: Visio uses inches with origin at bottom-left (y increases upward).
+Converts to SVG/HTML convention: origin at top-left (y increases downward).
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from typing import Any
 import vsdx
 
 
-# ── Hjelpefunksjoner ────────────────────────────────────────────────────────
+# ── Helpers ──────────────────────────────────────────────────────────────────
 
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
@@ -27,20 +27,20 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
 
 
 def _inches_to_px(inches: float, dpi: int = 96) -> float:
-    """Visio-koordinater er i inches; konverterer til CSS px (96 dpi)."""
+    """Converts Visio inches to CSS pixels at 96 dpi."""
     return round(inches * dpi, 2)
 
 
 def _clean_text(text: str | None) -> str:
     if not text:
         return ""
-    # Fjern XML-entiteter og whitespace
+    # Strip XML tags and whitespace
     text = re.sub(r"<[^>]+>", "", text)
     return text.strip()
 
 
 def _shape_style(shape: vsdx.Shape) -> dict:
-    """Henter ut fill- og stroke-farge og font-størrelse der det er tilgjengelig."""
+    """Extracts fill color, stroke color, and font size where available."""
     style: dict = {}
     try:
         fill = shape.cell_value("FillForegnd")
@@ -63,16 +63,16 @@ def _shape_style(shape: vsdx.Shape) -> dict:
     return style
 
 
-# ── Hoved-konvertering ───────────────────────────────────────────────────────
+# ── Conversion ────────────────────────────────────────────────────────────────
 
 
 def _is_edge(shape: vsdx.Shape) -> bool:
-    """Returnerer True hvis shape er en connector/edge."""
+    """Returns True if the shape is a connector/edge."""
     return str(shape.shape_type).lower() in ("edge", "connector")
 
 
 def _parse_shape(shape: vsdx.Shape, page_height_in: float) -> dict | None:
-    """Konverterer én Visio-shape til et node-objekt i JSON-grafen."""
+    """Converts a single Visio shape to a node object in the JSON graph."""
     if _is_edge(shape):
         return None
 
@@ -81,8 +81,8 @@ def _parse_shape(shape: vsdx.Shape, page_height_in: float) -> dict | None:
     w_in = _safe_float(shape.width)
     h_in = _safe_float(shape.height)
 
-    # Visio: PinX/PinY er sentrum av shape, y opp.
-    # HTML: top-left, y ned.
+    # Visio: PinX/PinY is the center of the shape, y increases upward.
+    # HTML: origin is top-left, y increases downward.
     x_px = _inches_to_px(x_in - w_in / 2)
     y_px = _inches_to_px(page_height_in - y_in - h_in / 2)
 
@@ -99,7 +99,7 @@ def _parse_shape(shape: vsdx.Shape, page_height_in: float) -> dict | None:
 
 
 def _parse_connector(shape: vsdx.Shape) -> dict | None:
-    """Konverterer én Visio-connector til et edge-objekt i JSON-grafen."""
+    """Converts a single Visio connector to an edge object in the JSON graph."""
     if not _is_edge(shape):
         return None
 
@@ -123,8 +123,8 @@ def _parse_connector(shape: vsdx.Shape) -> dict | None:
 
 
 def _parse_page(page: vsdx.Page) -> dict:
-    """Konverterer én Visio-side til et page-objekt i JSON-grafen."""
-    # Sidemål – page.width/height er buggy i denne vsdx-versjonen, bruker A4 landskapsformat
+    """Converts a single Visio page to a page object in the JSON graph."""
+    # page.width/height is buggy in this vsdx version — fall back to A4 landscape
     try:
         page_w_in = _safe_float(page.width, default=11.0)
         page_h_in = _safe_float(page.height, default=8.5)
@@ -143,7 +143,7 @@ def _parse_page(page: vsdx.Page) -> dict:
             edge = _parse_connector(shape)
             if edge:
                 edges.append(edge)
-            # Rekursivt for grupperte shapes
+            # Recurse into grouped shapes
             if shape.sub_shapes():
                 walk(shape.sub_shapes())
 
@@ -161,17 +161,17 @@ def _parse_page(page: vsdx.Page) -> dict:
 
 def parse_vsdx(path: str | Path) -> dict:
     """
-    Hovedfunksjon: leser en .vsdx-fil og returnerer intermediate JSON-graf.
+    Reads a .vsdx file and returns an intermediate JSON graph.
 
     Args:
-        path: Filsti til .vsdx-filen.
+        path: Path to the .vsdx file.
 
     Returns:
-        Dict med nøklene 'meta' og 'pages' i henhold til JSON-skjemaet.
+        Dict with keys 'meta' and 'pages' according to the JSON schema.
     """
     path = Path(path)
     with vsdx.VisioFile(str(path)) as vis:
-        # Metadata – vsdx har ikke document_properties, bruker filnavn som tittel
+        # vsdx does not expose document_properties — use filename as title
         meta = {
             "title": path.stem,
             "author": "",
