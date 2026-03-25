@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+vsdx_to_html.egg-info/
+dist/
+build/
+.venv/
+
+# Genererte test-filer
+tests/*.html
+tests/*.vsdx
+
+# Genererte HTML-output
+*.html
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# macOS
+.DS_Store
