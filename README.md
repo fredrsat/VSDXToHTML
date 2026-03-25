@@ -43,12 +43,3 @@ convert diagram.vsdx --theme corporate  # with theme
 - **No cross-diagram navigation** — links between connected diagrams are not supported out of the box
 - **Zoom/pan** — simpler than dedicated diagram viewers such as draw.io
 
-## Testing
-
-Generate test files and run a conversion:
-
-```bash
-python3 tests/create_test_vsdx.py
-python3 convert.py tests/simple.vsdx
-python3 convert.py tests/multipage.vsdx
-```
